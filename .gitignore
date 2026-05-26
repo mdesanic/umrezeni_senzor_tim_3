@@ -1,0 +1,30 @@
+# ModusToolbox / Eclipse workspace metadata
+.metadata/
+
+# ModusToolbox shared dependencies
+mtb_shared/
+
+# Build outputs
+build/
+Build/
+Debug/
+Release/
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.o
+*.d
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
