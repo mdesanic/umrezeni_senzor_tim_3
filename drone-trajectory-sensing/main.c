@@ -4,7 +4,7 @@
 #include "cy_retarget_io.h"
 #include "xensiv_dps3xx_mtb.h"
 #include "xensiv_dps3xx.h"
-#include "mtb_bmi160.h"
+#include "mtb_bmi270.h"
 #include "math.h"
 
 #define OVERSAMPLING            7
@@ -39,7 +39,7 @@ cyhal_i2c_cfg_t i2c_cfg_master = {
 // -----------------------------------------------------------------------------------------------------------
 // MOTION
 
-mtb_bmi160_t    bmi160_sensor;
+mtb_bmi270_t    bmi270_sensor;
 
 static float s_bias_x = 0.0f;
 static float s_bias_y = 0.0f;
@@ -54,22 +54,24 @@ static int motion_sensing_init(cyhal_i2c_t *i2c_ptr)
     if (i2c_ptr == NULL)
         return -3;
  
-    cy_rslt_t result = mtb_bmi160_init_i2c(&bmi160_sensor, i2c_ptr, MTB_BMI160_DEFAULT_ADDRESS);
-    if (result != CY_RSLT_SUCCESS)
+    cy_rslt_t result = mtb_bmi270_init_i2c(&bmi270_sensor, i2c_ptr, MTB_BMI270_ADDRESS_DEFAULT);
+    if (result != CY_RSLT_SUCCESS){
+    	printf("  bmi160_init_i2c -> 0x%08lX\r\n", (unsigned long)result);
         return -1;
+    }
  
     /* Calibration — keep sensor stationary during this loop (~0.4 s) */
     double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
-    mtb_bmi160_data_t sample;
+    mtb_bmi270_data_t sample;
  
     for (int i = 0; i < CALIB_SAMPLES; i++)
     {
-        if (mtb_bmi160_read(&bmi160_sensor, &sample) != CY_RSLT_SUCCESS)
+        if (mtb_bmi270_read(&bmi270_sensor, &sample) != CY_RSLT_SUCCESS)
             return -1;
  
-        sum_x += (double)sample.accel.x * ACC_SCALE;
-        sum_y += (double)sample.accel.y * ACC_SCALE;
-        sum_z += (double)sample.accel.z * ACC_SCALE;
+        sum_x += (double)sample.sensor_data.acc.x * ACC_SCALE;
+        sum_y += (double)sample.sensor_data.acc.y * ACC_SCALE;
+        sum_z += (double)sample.sensor_data.acc.z * ACC_SCALE;
  
         cyhal_system_delay_ms(5);
     }
@@ -93,13 +95,13 @@ static int motion_sensing_get_displacement(float dt_s, float *position)
     if (position == NULL)
         return -3;
  
-    mtb_bmi160_data_t sample;
-    if (mtb_bmi160_read(&bmi160_sensor, &sample) != CY_RSLT_SUCCESS)
+    mtb_bmi270_data_t sample;
+    if (mtb_bmi270_read(&bmi270_sensor, &sample) != CY_RSLT_SUCCESS)
         return -2;
  
-    float ax = (float)sample.accel.x * ACC_SCALE - s_bias_x;
-    float ay = (float)sample.accel.y * ACC_SCALE - s_bias_y;
-    float az = (float)sample.accel.z * ACC_SCALE - s_bias_z;
+    float ax = (float)sample.sensor_data.acc.x * ACC_SCALE - s_bias_x;
+    float ay = (float)sample.sensor_data.acc.y * ACC_SCALE - s_bias_y;
+    float az = (float)sample.sensor_data.acc.z * ACC_SCALE - s_bias_z;
  
     if (ax > -ZERO_THRESHOLD && ax < ZERO_THRESHOLD) ax = 0.0f;
     if (ay > -ZERO_THRESHOLD && ay < ZERO_THRESHOLD) ay = 0.0f;
@@ -166,7 +168,11 @@ int main(void)
     printf("=========================================================\n\n\r");
 
     /* Initialize i2c for pressure sensor */
+    printf("Init I2C...\r\n");
+
     result = cyhal_i2c_init(&I2Cm_HW, CYBSP_I2C_SDA, CYBSP_I2C_SCL, NULL);
+    printf("  -> 0x%08lX\r\n", (unsigned long)result);
+
     if (result != CY_RSLT_SUCCESS)
     {
         printf("\r\nI2C initialization failed\r\n");
@@ -174,7 +180,11 @@ int main(void)
     }
 
     /* Configure i2c with master configurations */
+    printf("Configure I2C...\r\n");
+
     result = cyhal_i2c_configure(&I2Cm_HW, &i2c_cfg_master);
+    printf("  -> 0x%08lX\r\n", (unsigned long)result);
+
     if (result != CY_RSLT_SUCCESS)
     {
         printf("\r\nFailed to configure I2C\r\n");
@@ -182,8 +192,12 @@ int main(void)
     }
 
     /* Initialize pressure sensor */
+    printf("Init DPS310...\r\n");
+
     result = xensiv_dps3xx_mtb_init_i2c(&dps310_sensor, &I2Cm_HW,
                                         XENSIV_DPS3XX_I2C_ADDR_DEFAULT);
+	printf("  -> 0x%08lX\r\n", (unsigned long)result);
+
     if (result != CY_RSLT_SUCCESS)
     {
         printf("\r\nFailed to initialize DPS310 I2C\r\n");
@@ -260,7 +274,7 @@ int main(void)
         }
         else
         {
-            printf("BMI160 read failed (err=%d)\r\n", err);
+            printf("BMI270 read failed (err=%d)\r\n", err);
             motion_sensing_reset_velocity();
         }
 
