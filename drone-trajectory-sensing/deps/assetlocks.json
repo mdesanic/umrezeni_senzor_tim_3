@@ -1,5 +1,9 @@
 [
     {
+        "asset-name": "audio-codec-wm8960",
+        "locked-commit": "release-v1.0.0"
+    },
+    {
         "asset-name": "bt-fw-mur-cyw43012",
         "locked-commit": "release-v1.0.0"
     },
@@ -24,6 +28,10 @@
         "locked-commit": "release-v4.37.0"
     },
     {
+        "asset-name": "display-oled-ssd1306",
+        "locked-commit": "release-v1.0.3"
+    },
+    {
         "asset-name": "mtb-hal-cat1",
         "locked-commit": "release-v2.7.4"
     },
@@ -34,5 +42,9 @@
     {
         "asset-name": "recipe-make-cat1a",
         "locked-commit": "release-v2.7.0"
+    },
+    {
+        "asset-name": "sensor-orientation-bmx160",
+        "locked-commit": "release-v1.0.2"
     }
 ]
