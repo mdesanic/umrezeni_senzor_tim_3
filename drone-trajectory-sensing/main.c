@@ -4,6 +4,7 @@
 #include "cy_retarget_io.h"
 #include "xensiv_dps3xx_mtb.h"
 #include "xensiv_dps3xx.h"
+#include "mtb_bmi160.h"
 #include "math.h"
 
 #define OVERSAMPLING            7
@@ -12,6 +13,13 @@
 #define R 287.05f
 #define G 9.80665f
 #define REFERENCE_SAMPELING 20
+
+/* Motion sensing */
+#define ACC_SCALE      (1.0f / 16384.0f * G)
+#define CALIB_SAMPLES   64
+#define ZERO_THRESHOLD  0.05f
+#define DT_S            0.1f
+
 /*******************************************************************************
 * Global Variables
 ********************************************************************************/
@@ -27,6 +35,89 @@ cyhal_i2c_cfg_t i2c_cfg_master = {
         0,                          /* address is not used for master mode */
         I2C_MASTER_FREQUENCY
 };
+
+// -----------------------------------------------------------------------------------------------------------
+// MOTION
+
+mtb_bmi160_t    bmi160_sensor;
+
+static float s_bias_x = 0.0f;
+static float s_bias_y = 0.0f;
+static float s_bias_z = 0.0f;
+
+static float s_vel_x  = 0.0f;
+static float s_vel_y  = 0.0f;
+static float s_vel_z  = 0.0f;
+
+static int motion_sensing_init(cyhal_i2c_t *i2c_ptr)
+{
+    if (i2c_ptr == NULL)
+        return -3;
+ 
+    cy_rslt_t result = mtb_bmi160_init_i2c(&bmi160_sensor, i2c_ptr, MTB_BMI160_DEFAULT_ADDRESS);
+    if (result != CY_RSLT_SUCCESS)
+        return -1;
+ 
+    /* Calibration — keep sensor stationary during this loop (~0.4 s) */
+    double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
+    mtb_bmi160_data_t sample;
+ 
+    for (int i = 0; i < CALIB_SAMPLES; i++)
+    {
+        if (mtb_bmi160_read(&bmi160_sensor, &sample) != CY_RSLT_SUCCESS)
+            return -1;
+ 
+        sum_x += (double)sample.accel.x * ACC_SCALE;
+        sum_y += (double)sample.accel.y * ACC_SCALE;
+        sum_z += (double)sample.accel.z * ACC_SCALE;
+ 
+        cyhal_system_delay_ms(5);
+    }
+ 
+    s_bias_x = (float)(sum_x / CALIB_SAMPLES);
+    s_bias_y = (float)(sum_y / CALIB_SAMPLES);
+    s_bias_z = (float)(sum_z / CALIB_SAMPLES) - G;
+ 
+    s_vel_x = s_vel_y = s_vel_z = 0.0f;
+    return 0;
+}
+
+
+static inline void motion_sensing_reset_velocity(void)
+{
+    s_vel_x = s_vel_y = s_vel_z = 0.0f;
+}
+
+static int motion_sensing_get_displacement(float dt_s, float *position)
+{
+    if (position == NULL)
+        return -3;
+ 
+    mtb_bmi160_data_t sample;
+    if (mtb_bmi160_read(&bmi160_sensor, &sample) != CY_RSLT_SUCCESS)
+        return -2;
+ 
+    float ax = (float)sample.accel.x * ACC_SCALE - s_bias_x;
+    float ay = (float)sample.accel.y * ACC_SCALE - s_bias_y;
+    float az = (float)sample.accel.z * ACC_SCALE - s_bias_z;
+ 
+    if (ax > -ZERO_THRESHOLD && ax < ZERO_THRESHOLD) ax = 0.0f;
+    if (ay > -ZERO_THRESHOLD && ay < ZERO_THRESHOLD) ay = 0.0f;
+    if (az > -ZERO_THRESHOLD && az < ZERO_THRESHOLD) az = 0.0f;
+ 
+    position[0] = s_vel_x * dt_s + 0.5f * ax * dt_s * dt_s;
+    position[1] = s_vel_y * dt_s + 0.5f * ay * dt_s * dt_s;
+    position[2] = s_vel_z * dt_s + 0.5f * az * dt_s * dt_s;
+ 
+    s_vel_x += ax * dt_s;
+    s_vel_y += ay * dt_s;
+    s_vel_z += az * dt_s;
+ 
+    return 0;
+}
+
+
+// -----------------------------------------------------------------------------------------------------------
 
 /*******************************************************************************
  * Function Name: main
@@ -110,6 +201,17 @@ int main(void)
         CY_ASSERT(0);
     }
 
+	/* BMI160 init + calibration */
+	float position[3];
+    printf("Calibrating BMI160 — keep sensor stationary...\r\n");
+    if (motion_sensing_init(&I2Cm_HW) != 0)
+    {
+        printf("BMI160 init failed\r\n");
+        CY_ASSERT(0);
+    }
+    printf("Calibration done.\r\n\n");
+
+
 	float p0 = 0.0f;
 	float t0 = 0.0f;
 
@@ -149,8 +251,23 @@ int main(void)
             CY_ASSERT(0);
         }
         
+		
+		int err = motion_sensing_get_displacement(DT_S, position);
+        if (err == 0)
+        {
+            printf("dx: %.4f m  dy: %.4f m  dz: %.4f m\r\n",
+                   position[0], position[1], position[2]);
+        }
+        else
+        {
+            printf("BMI160 read failed (err=%d)\r\n", err);
+            motion_sensing_reset_velocity();
+        }
+
+
+
         /* Generate a delay of 1 second before next read */
-        cyhal_system_delay_ms(1000);
+        cyhal_system_delay_ms((uint32_t)(DT_S * 1000.0f));
     }
 }
 
