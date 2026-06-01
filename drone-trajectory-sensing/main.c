@@ -1,111 +1,130 @@
 /*******************************************************************************
-* File Name:   main.c
+* File Name: main.c
 *
-* Description: This is the source code for the Empty Application Example
-*              for ModusToolbox.
+* Description:
+*   UART primjer bez DMA-a.
 *
-* Related Document: See README.md
+* PuTTY setup:
+*   Connection type: Serial
+*   Serial line: COMx
+*   Speed: 115200
 *
+*   Connection -> Serial:
+*   Data bits: 8
+*   Stop bits: 1
+*   Parity: None
+*   Flow control: None
 *
-*******************************************************************************
- * (c) 2021-2026, Infineon Technologies AG, or an affiliate of Infineon
- * Technologies AG. All rights reserved.
- * This software, associated documentation and materials ("Software") is
- * owned by Infineon Technologies AG or one of its affiliates ("Infineon")
- * and is protected by and subject to worldwide patent protection, worldwide
- * copyright laws, and international treaty provisions. Therefore, you may use
- * this Software only as provided in the license agreement accompanying the
- * software package from which you obtained this Software. If no license
- * agreement applies, then any use, reproduction, modification, translation, or
- * compilation of this Software is prohibited without the express written
- * permission of Infineon.
- *
- * Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS SOFTWARE
- * IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
- * INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF NON-INFRINGEMENT OF
- * THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH AS WARRANTIES OF FITNESS FOR A
- * SPECIFIC USE/PURPOSE OR MERCHANTABILITY.
- * Infineon reserves the right to make changes to the Software without notice.
- * You are responsible for properly designing, programming, and testing the
- * functionality and safety of your intended application of the Software, as
- * well as complying with any legal requirements related to its use. Infineon
- * does not guarantee that the Software will be free from intrusion, data theft
- * or loss, or other breaches ("Security Breaches"), and Infineon shall have
- * no liability arising out of any Security Breaches. Unless otherwise
- * explicitly approved by Infineon, the Software may not be used in any
- * application where a failure of the Product or any consequences of the use
- * thereof can reasonably be expected to result in personal injury.
+* Napomena:
+*   COMx se provjeri u Windows Device Manageru:
+*   Device Manager -> Ports (COM & LPT)
 *******************************************************************************/
 
-/*******************************************************************************
-* Header Files
-*******************************************************************************/
-#if defined (CY_USING_HAL)
+#if defined(CY_USING_HAL)
 #include "cyhal.h"
 #endif
+
 #include "cybsp.h"
+#include <stdint.h>
+#include <stddef.h>
 
-/******************************************************************************
-* Macros
-*******************************************************************************/
+cyhal_uart_t uart_obj;
 
+/* UART init: 115200 baud, 8N1 */
+static cy_rslt_t uart_init(void)
+{
+    cyhal_uart_cfg_t uart_cfg = {
+        .data_bits      = 8,
+        .stop_bits      = 1,
+        .parity         = CYHAL_UART_PARITY_NONE,
+        .rx_buffer      = NULL,
+        .rx_buffer_size = 0,
+    };
 
-/*******************************************************************************
-* Global Variables
-*******************************************************************************/
+    cy_rslt_t result = cyhal_uart_init(&uart_obj,
+                                       CYBSP_DEBUG_UART_TX,
+                                       CYBSP_DEBUG_UART_RX,
+                                       NC,
+                                       NC,
+                                       NULL,
+                                       &uart_cfg);
 
+    if (result != CY_RSLT_SUCCESS)
+    {
+        return result;
+    }
 
-/*******************************************************************************
-* Function Prototypes
-*******************************************************************************/
+    return cyhal_uart_set_baud(&uart_obj, 115200, NULL);
+}
 
+/* Slanje raw podataka */
+static cy_rslt_t uart_send_data(uint8_t *data, size_t length)
+{
+    return cyhal_uart_write(&uart_obj, data, &length);
+}
 
-/*******************************************************************************
-* Function Definitions
-*******************************************************************************/
+/* Slanje teksta */
+static cy_rslt_t uart_send_text(const char *text)
+{
+    size_t length = 0;
 
-/*******************************************************************************
-* Function Name: main
-*********************************************************************************
-* Summary:
-* This is the main function for CPU. It...
-*    1.
-*    2.
-*
-* Parameters:
-*  void
-*
-* Return:
-*  int
-*
-*******************************************************************************/
+    while (text[length] != '\0')
+    {
+        length++;
+    }
+
+    return cyhal_uart_write(&uart_obj, (void *)text, &length);
+}
+
 int main(void)
 {
     cy_rslt_t result;
 
-#if defined (CY_DEVICE_SECURE) && defined (CY_USING_HAL)
-    cyhal_wdt_t wdt_obj;
-
-    /* Clear watchdog timer so that it doesn't trigger a reset */
-    result = cyhal_wdt_init(&wdt_obj, cyhal_wdt_get_max_timeout_ms());
-    CY_ASSERT(CY_RSLT_SUCCESS == result);
-    cyhal_wdt_free(&wdt_obj);
-#endif
-
-    /* Initialize the device and board peripherals */
     result = cybsp_init();
+    CY_ASSERT(result == CY_RSLT_SUCCESS);
 
-    /* Board init failed. Stop program execution */
-    if (result != CY_RSLT_SUCCESS)
-    {
-        CY_ASSERT(0);
-    }
-
-    /* Enable global interrupts */
     __enable_irq();
+
+    result = uart_init();
+    CY_ASSERT(result == CY_RSLT_SUCCESS);
+
+    uart_send_text("\r\nUART started without DMA.\r\n");
+
+    uint32_t counter = 0;
 
     for (;;)
     {
+        /*
+         * Primjer 1: slanje običnog teksta u PuTTY.
+         * Kolege ovdje mogu ubaciti svoje vrijednosti/senzorske podatke.
+         */
+        uart_send_text("Hello from Infineon board\r\n");
+
+        /*
+         * Primjer 2: slanje raw buffera.
+         * Ovo neće uvijek izgledati čitljivo u PuTTY-u jer nisu svi bajtovi ASCII znakovi.
+         */
+        uint8_t data[] = {
+            'D', 'A', 'T', 'A', ':', ' ',
+            '1', '2', '3', '4',
+            '\r', '\n'
+        };
+
+        uart_send_data(data, sizeof(data));
+
+        /*
+         * Primjer 3: vrlo jednostavan brojač bez sprintf-a.
+         * Za pravi formatted output može se kasnije dodati sprintf/printf.
+         */
+        uart_send_text("Loop counter tick\r\n");
+
+        counter++;
+
+        /*
+         * Pauza da se poruke ne šalju prebrzo.
+         * 1000 ms = 1 sekunda
+         */
+        cyhal_system_delay_ms(1000);
     }
 }
 
