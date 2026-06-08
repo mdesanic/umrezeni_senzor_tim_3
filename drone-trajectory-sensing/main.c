@@ -326,20 +326,6 @@ int main(void)
         CY_ASSERT(0);
     }
 
-    printf("Scanning I2C bus...\r\n");
-
-    for (uint8_t addr = 1; addr < 127; addr++)
-    {
-        uint8_t dummy = 0;
-        cy_rslt_t r = cyhal_i2c_master_read(&I2Cm_HW, addr, &dummy, 1, 10, true);
-
-        if (r == CY_RSLT_SUCCESS)
-        {
-            printf("Found I2C device at 0x%02X\r\n", addr);
-        }
-    }
-
-    printf("I2C scan done.\r\n\r\n");
 
     printf("Calibrating BMI160, keep sensor stationary...\r\n");
 
@@ -387,6 +373,8 @@ int main(void)
 
     for (;;)
     {
+        float height = 0.0f;
+
         if (xensiv_dps3xx_read(&dps310_sensor, &pressure, &temperature) == CY_RSLT_SUCCESS)
         {
             printf("Pressure: %.2f mBar\tTemperature: %.2f C\r\n",
@@ -394,7 +382,7 @@ int main(void)
                    temperature);
 
             float temperature_k = temperature + 273.15f;
-            float height = (R / G) * ((temperature_k + t0) / 2.0f) * logf(p0 / pressure);
+            height = (R / G) * ((temperature_k + t0) / 2.0f) * logf(p0 / pressure);
 
             printf("Height: %.2f m\r\n", height);
         }
@@ -413,7 +401,13 @@ int main(void)
                    position[0],
                    position[1],
                    position[2]);
+
+            printf("%.4f,%.4f,%.4f\n",
+                   position[0],
+                   position[1],
+                   height);
         }
+
         else
         {
             printf("BMI160 read failed, err=%d\r\n", err);

@@ -8,6 +8,8 @@ int maxPoints = 5000;
 
 boolean demoMode = true; //follows cube edges, disable to read UART
 float demoPos = 0.0;
+int portIndex = 0;      
+float scale = 1000.0;    
 
 // Cube edge traversal path
 PVector[] cubePath = {
@@ -53,10 +55,10 @@ void setup() {
 
   // Try opening first port if one exists
   try {
-    if (ports.length > 0) {
-      myPort = new Serial(this, ports[0], 115200);
+    if (ports.length > > portIndex) {
+      myPort = new Serial(this, ports[portIndex], 115200);
       myPort.bufferUntil('\n');
-      println("Connected to: " + ports[0]);
+      println("Connected to: " + ports[portIndex]);
     } else {
       println("No serial ports found. Running demo mode.");
     }
@@ -118,9 +120,12 @@ void serialEvent(Serial port) {
 
   try {
 
-    float x = float(parts[0]);
-    float y = float(parts[1]);
-    float z = float(parts[2]);
+    float x = float(parts[0]) * scale;
+    float y = float(parts[1]) * scale;
+    float z = float(parts[2]) * scale;
+
+    if (Float.isNaN(x) || Float.isNaN(y) || Float.isNaN(z)) return;
+
 
     demoMode = false;
 
@@ -150,11 +155,7 @@ void generateDemoData() {
   int seg = floor(demoPos);
 
   float t = demoPos - seg;
-
-  PVector a = cubePath[seg];
-  PVector b = cubePath[seg + 1];
-
-  PVector p = PVector.lerp(a, b, t);
+  PVector p = PVector.lerp(cubePath[seg], cubePath[seg + 1], t);
 
   points.add(p);
 
@@ -203,13 +204,8 @@ void drawPath() {
   beginShape();
 
   for (PVector p : points) {
-    vertex(
-      p.x,
-      -p.y,
-      p.z
-    );
+    vertex(p.x, -p.y, p.z);
   }
-
   endShape();
 
   // Current point marker
@@ -226,6 +222,5 @@ void drawPath() {
   noStroke();
   fill(255, 0, 255);
   sphere(8);
-
   popMatrix();
 }
