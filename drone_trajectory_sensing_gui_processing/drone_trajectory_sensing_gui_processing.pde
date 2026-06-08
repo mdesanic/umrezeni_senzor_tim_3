@@ -8,8 +8,8 @@ int maxPoints = 5000;
 
 boolean demoMode = true; //follows cube edges, disable to read UART
 float demoPos = 0.0;
-int portIndex = 0;      
-float scale = 1000.0;    
+int portIndex = 3;      
+float scale = 50.0;    
 
 // Cube edge traversal path
 PVector[] cubePath = {
@@ -55,7 +55,7 @@ void setup() {
 
   // Try opening first port if one exists
   try {
-    if (ports.length > > portIndex) {
+    if (ports.length > portIndex) {
       myPort = new Serial(this, ports[portIndex], 115200);
       myPort.bufferUntil('\n');
       println("Connected to: " + ports[portIndex]);
